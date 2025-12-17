@@ -1,0 +1,7 @@
+{
+  "name": "Cosmic Christmas Tree",
+  "description": "A cinematic, interactive 3D Christmas tree made of rainbow particles set against a moving galaxy.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
