@@ -7,6 +7,27 @@
     <title>Cosmic Christmas Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+      <style>
+    /* 新增：确保所有层级都强制占满全屏，消除底部黑块 */
+    html, body, #root {
+        height: 100vh !important;
+        width: 100vw !important;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000000;
+    }
+
+    /* 原有样式保留 */
+    body { margin: 0; padding: 0; background: #000000; overflow: hidden; }
+    ::-webkit-scrollbar { display: none; }
+    
+    .camera-preview {
+        transform: scaleX(-1);
+        border-radius: 12px;
+    }
+    /* ... 后面保持不变 ... */
+</style>
       body { margin: 0; padding: 0; background: #000000; overflow: hidden; }
       ::-webkit-scrollbar { display: none; }
       .camera-preview {
