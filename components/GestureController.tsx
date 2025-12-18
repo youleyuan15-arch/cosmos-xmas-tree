@@ -36,11 +36,10 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
           runningMode: "VIDEO",
           numHands: 1
         });
-        // 尝试自动启动
+        // 尝试自动启动，失败也没关系，后面有点击启动
         startWebcam();
       } catch (error) { 
-        console.error("Error initializing MediaPipe:", error);
-        setErrorMsg("初始化失败");
+        console.error("MediaPipe Init Error:", error);
       }
     };
     initLandmarker();
@@ -51,32 +50,45 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
   }, []);
 
   const startWebcam = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMsg("浏览器不支持摄像头");
+    // 1. 检查 API 是否存在 (非 HTTPS 环境下这里会直接 alert)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("错误：当前环境不支持摄像头。请确保使用 HTTPS 访问，且不在预览窗口内打开。");
+      setErrorMsg("环境不支持");
       return;
     }
     
     try {
-      const constraints = {
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: "user" // 强制使用前置摄像头
-        }
+      // 2. 尝试获取视频流
+      const constraints = { 
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
       };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (e) {
+        console.warn("标准请求失败，尝试简易模式...");
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // 手机端关键：必须在 play() 成功后再开始预测
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
+          videoRef.current?.play().catch(e => alert("播放被拦截: " + e.message));
           setWebcamRunning(true);
+          setErrorMsg(null);
           predictWebcam();
         };
       }
-    } catch (err) { 
-      console.error("Webcam error:", err);
-      setErrorMsg("摄像头被拒绝");
+    } catch (err: any) { 
+      console.error("Webcam Error:", err);
+      // 在手机端直接弹出错误详情
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        alert("权限被拒绝。请在手机设置里允许浏览器访问摄像头，并刷新页面。");
+      } else {
+        alert("启动失败: " + err.message);
+      }
+      setErrorMsg("启动失败");
     }
   };
 
@@ -107,25 +119,21 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
     const wrist = lm[0];
     const getDist = (p1: any, p2: any) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
     const isUp = (tip: number, pip: number) => getDist(lm[tip], wrist) > getDist(lm[pip], wrist);
-    const isFolded = (tip: number, mcp: number) => getDist(lm[tip], wrist) < getDist(lm[mcp], wrist) * 1.12;
-
     const indexUp = isUp(8, 6), middleUp = isUp(12, 10), ringUp = isUp(16, 14), pinkyUp = isUp(20, 18);
-    const indexFolded = isFolded(8, 5), middleFolded = isFolded(12, 9), ringFolded = isFolded(16, 13), pinkyFolded = isFolded(20, 17);
-    const thumbUp = getDist(lm[4], lm[5]) > getDist(lm[3], lm[5]) * 1.2;
     const upCount = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
-
+    const thumbUp = getDist(lm[4], lm[5]) > getDist(lm[3], lm[5]) * 1.2;
     const pinchDist = getDist(lm[4], lm[8]);
-    if (pinchDist < 0.045 && upCount >= 1) return 'Pinch';
-    if (indexFolded && middleFolded && ringFolded && pinkyFolded && !thumbUp) return 'Fist';
-    if (thumbUp && indexUp && middleFolded && ringFolded && pinkyFolded) return 'L_Shape';
-    if (upCount >= 3) return 'Open_Palm';
 
+    if (pinchDist < 0.045 && upCount >= 1) return 'Pinch';
+    if (upCount === 0 && !thumbUp) return 'Fist';
+    if (thumbUp && indexUp && upCount === 1) return 'L_Shape';
+    if (upCount >= 3) return 'Open_Palm';
     return 'None';
   };
 
   return (
     <div 
-      onClick={!webcamRunning ? startWebcam : undefined}
+      onClick={startWebcam}
       className={`relative rounded-xl overflow-hidden shadow-xl border transition-all duration-300 w-32 h-24 sm:w-[180px] sm:h-[135px] bg-black group ${activeGesture !== 'None' ? 'border-yellow-400 scale-105' : 'border-white/30'}`}
     >
       <video 
@@ -137,24 +145,23 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
         className="w-full h-full object-cover opacity-80" 
       />
       
-      {/* 状态指示 */}
       <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-black/40 text-[6px] text-white border border-white/20 flex items-center gap-1">
         <span className={`w-1 h-1 rounded-full ${webcamRunning ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></span>
-        {webcamRunning ? 'Camera On' : (errorMsg || 'Tap to Start')}
+        {webcamRunning ? 'Active' : (errorMsg || 'Tap to Start')}
       </div>
 
-      {activeGesture !== 'None' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-yellow-400/20">
-             <div className="bg-yellow-400 text-black px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter animate-bounce">
-                {activeGesture}
-            </div>
+      {!webcamRunning && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+           <div className="text-[14px] mb-1">📷</div>
+           <div className="text-[8px] text-white/70">点我授权</div>
         </div>
       )}
 
-      {!webcamRunning && !errorMsg && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 pointer-events-none">
-           <div className="text-[14px] mb-1">📷</div>
-           <div className="text-[8px] text-white/70">点击此处启动</div>
+      {activeGesture !== 'None' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+             <div className="bg-yellow-400 text-black px-2 py-0.5 rounded-full text-[10px] font-black animate-bounce uppercase">
+                {activeGesture}
+            </div>
         </div>
       )}
     </div>
