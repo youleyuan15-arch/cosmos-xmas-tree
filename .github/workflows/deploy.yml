@@ -1,7 +1,8 @@
 name: Deploy to GitHub Pages
 on:
   push:
-    branches: [主要的] # 确认你的分支名是“主要的”还是“main”
+    # 只要这三个名字中有一个对上，就会开始运行
+    branches: [main, master, 主要的] 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
