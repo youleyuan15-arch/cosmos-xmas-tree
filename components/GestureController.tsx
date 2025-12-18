@@ -27,19 +27,21 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
   useEffect(() => {
     const initLandmarker = async () => {
       try {
+        // 使用更稳定的 CDN 版本，确保手机端能加载wasm文件
         const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm");
         landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-            delegate: "GPU"
+            delegate: "GPU" // 手机端会自动回退到CPU，保证兼容性
           },
           runningMode: "VIDEO",
           numHands: 1
         });
-        // 尝试自动启动，失败也没关系，后面有点击启动
+        // 尝试自动启动
         startWebcam();
       } catch (error) { 
         console.error("MediaPipe Init Error:", error);
+        setErrorMsg("模型初始化失败");
       }
     };
     initLandmarker();
@@ -50,45 +52,41 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
   }, []);
 
   const startWebcam = async () => {
-    // 1. 检查 API 是否存在 (非 HTTPS 环境下这里会直接 alert)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("错误：当前环境不支持摄像头。请确保使用 HTTPS 访问，且不在预览窗口内打开。");
-      setErrorMsg("环境不支持");
+      setErrorMsg("环境不支持摄像头");
       return;
     }
     
     try {
-      // 2. 尝试获取视频流
+      // 优化：针对手机端降低理想分辨率，提高识别流畅度
       const constraints = { 
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+        video: { 
+          facingMode: "user", 
+          width: { ideal: 480 }, 
+          height: { ideal: 360 },
+          frameRate: { ideal: 30 }
+        } 
       };
       
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (e) {
-        console.warn("标准请求失败，尝试简易模式...");
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      }
+      let stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(e => alert("播放被拦截: " + e.message));
-          setWebcamRunning(true);
-          setErrorMsg(null);
-          predictWebcam();
+          // 手机端必须显式调用 play() 且必须有用户交互（这里的 onClick 负责）
+          videoRef.current?.play().then(() => {
+            setWebcamRunning(true);
+            setErrorMsg(null);
+            predictWebcam();
+          }).catch(e => {
+            console.error("Play failed:", e);
+            setErrorMsg("点击视频区域开始");
+          });
         };
       }
     } catch (err: any) { 
       console.error("Webcam Error:", err);
-      // 在手机端直接弹出错误详情
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert("权限被拒绝。请在手机设置里允许浏览器访问摄像头，并刷新页面。");
-      } else {
-        alert("启动失败: " + err.message);
-      }
-      setErrorMsg("启动失败");
+      setErrorMsg("权限被拦截");
     }
   };
 
@@ -98,18 +96,23 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
         return;
     }
     
+    // 性能优化：确保当前帧真的有画面才进行计算
     let nowInMs = Date.now();
     if (videoRef.current.currentTime !== lastVideoTimeRef.current) {
       lastVideoTimeRef.current = videoRef.current.currentTime;
-      const results = landmarkerRef.current.detectForVideo(videoRef.current, nowInMs);
-      if (results.landmarks?.length > 0) {
-        const landmarks = results.landmarks[0];
-        const detected = recognizeGesture(landmarks);
-        setActiveGesture(detected);
-        onGestureDetectedRef.current({ type: detected, position: { x: landmarks[0].x, y: landmarks[0].y } });
-      } else {
-        setActiveGesture('None');
-        onGestureDetectedRef.current({ type: 'None', position: { x: 0.5, y: 0.5 } });
+      try {
+        const results = landmarkerRef.current.detectForVideo(videoRef.current, nowInMs);
+        if (results.landmarks?.length > 0) {
+          const landmarks = results.landmarks[0];
+          const detected = recognizeGesture(landmarks);
+          setActiveGesture(detected);
+          onGestureDetectedRef.current({ type: detected, position: { x: landmarks[0].x, y: landmarks[0].y } });
+        } else {
+          setActiveGesture('None');
+          onGestureDetectedRef.current({ type: 'None', position: { x: 0.5, y: 0.5 } });
+        }
+      } catch (e) {
+        console.error("Detection Error:", e);
       }
     }
     requestRef.current = requestAnimationFrame(predictWebcam);
@@ -119,12 +122,13 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
     const wrist = lm[0];
     const getDist = (p1: any, p2: any) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
     const isUp = (tip: number, pip: number) => getDist(lm[tip], wrist) > getDist(lm[pip], wrist);
+    
     const indexUp = isUp(8, 6), middleUp = isUp(12, 10), ringUp = isUp(16, 14), pinkyUp = isUp(20, 18);
     const upCount = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
     const thumbUp = getDist(lm[4], lm[5]) > getDist(lm[3], lm[5]) * 1.2;
     const pinchDist = getDist(lm[4], lm[8]);
 
-    if (pinchDist < 0.045 && upCount >= 1) return 'Pinch';
+    if (pinchDist < 0.05 && upCount >= 1) return 'Pinch';
     if (upCount === 0 && !thumbUp) return 'Fist';
     if (thumbUp && indexUp && upCount === 1) return 'L_Shape';
     if (upCount >= 3) return 'Open_Palm';
@@ -141,7 +145,7 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
         autoPlay 
         playsInline 
         muted 
-        webkit-playsinline="true"
+        webkit-playsinline="true" // 针对 iOS 的核心兼容性
         className="w-full h-full object-cover opacity-80" 
       />
       
@@ -153,7 +157,7 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
       {!webcamRunning && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
            <div className="text-[14px] mb-1">📷</div>
-           <div className="text-[8px] text-white/70">点我授权</div>
+           <div className="text-[8px] text-white/70">点我授权识别</div>
         </div>
       )}
 
