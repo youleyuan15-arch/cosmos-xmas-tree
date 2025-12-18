@@ -25,17 +25,16 @@ if (isFirebaseConfigured) {
     const app = initializeApp(firebaseConfig);
     db = getDatabase(app);
   } catch (e) {
-    console.warn("Firebase 初始化失败，切换至演示模式:", e);
+    console.warn("Firebase 初始化失败", e);
   }
 }
 
 export default function App() {
-  // 仅新增：设备检测
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   const [currentShape, setCurrentShape] = useState<ShapeType>('tree');
   const [showPhoto, setShowPhoto] = useState(false);
-  const [isManualMode, setIsManualMode] = useState(isMobile); // 手机默认手动模式
+  const [isManualMode, setIsManualMode] = useState(isMobile); 
   const [lastDetectedGesture, setLastDetectedGesture] = useState<GestureType>('None');
   
   const [showForm, setShowForm] = useState(false);
@@ -99,7 +98,7 @@ export default function App() {
   }, [photoAlbum]); 
 
   const handleGesture = useCallback((data: GestureData) => {
-    if (isMobile) return; // 手机端跳过手势计算
+    if (isMobile) return; 
     const { type, position } = data;
     setHandPosition(position);
     setLastDetectedGesture(type);
@@ -151,10 +150,11 @@ export default function App() {
           </div>
       )}
 
+      {/* 照片弹出：已调快至 duration-150 */}
       <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none`}>
-        <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-2xl transform transition-all duration-300 ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
-          <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover" />
-          <div className="text-center mt-1 sm:mt-3 font-serif text-gray-800 italic text-[10px] sm:text-lg">Merry Christmas</div>
+        <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center rounded-sm transition-all duration-150 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
+          <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover filter sepia-[0.1] bg-gray-900 border border-gray-100" />
+          <div className="text-center mt-1 sm:mt-3 font-serif text-gray-800 italic tracking-wide text-[10px] sm:text-lg">Merry Christmas</div>
         </div>
       </div>
 
@@ -171,19 +171,20 @@ export default function App() {
 
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 p-3 sm:p-6 flex flex-col justify-between">
         <div className="flex justify-between items-start">
-          <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] sm:rounded-[2rem] border border-white/50">
+          <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] sm:rounded-[2rem] border border-white/50 shadow-lg">
             <div className="space-y-0.5 sm:space-y-1">
-               {/* 增加 onClick，方便手机端触控 */}
-               <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''}`}><span className="text-sm">✊</span><span className="text-[8px] font-bold uppercase tracking-widest">Tree</span></div>
-               <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''}`}><span className="text-sm">🖐️</span><span className="text-[8px] font-bold uppercase tracking-widest">Space</span></div>
-               <div onClick={() => setShowPhoto(!showPhoto)} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20' : ''}`}><span className="text-sm">👌</span><span className="text-[8px] font-bold uppercase tracking-widest">Photo</span></div>
+               <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20 border-white/40' : 'border-transparent'} border transition-colors cursor-pointer`}><span className="text-sm">✊</span><span className="text-[8px] font-bold uppercase tracking-widest">Tree</span></div>
+               <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20 border-white/40' : 'border-transparent'} border transition-colors cursor-pointer`}><span className="text-sm">🖐️</span><span className="text-[8px] font-bold uppercase tracking-widest">Space</span></div>
+               {/* 这里的 Text 形状切换已加回 */}
+               <div onClick={() => setCurrentShape('text')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20 border-white/40' : 'border-transparent'} border transition-colors cursor-pointer`}><span className="text-sm">👆</span><span className="text-[8px] font-bold uppercase tracking-widest">Text</span></div>
+               <div onClick={() => setShowPhoto(!showPhoto)} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20 border-white/40' : 'border-transparent'} border transition-colors cursor-pointer`}><span className="text-sm">👌</span><span className="text-[8px] font-bold uppercase tracking-widest">Photo</span></div>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto items-end">
-             <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px]">✉️ Letter</button>
-             <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px]">🖼️ Album</button>
+             <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">✉️ Letter</button>
+             <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">🖼️ Album</button>
              {!isMobile && (
-                <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2 rounded-full border text-[10px] ${isManualMode ? 'bg-white text-black' : 'bg-white/5 border-white/50'}`}>
+                <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2 rounded-full border text-[10px] transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5 border-white/50'}`}>
                   {isManualMode ? 'MANUAL' : 'GESTURE'}
                 </button>
              )}
@@ -191,19 +192,17 @@ export default function App() {
         </div>
         
         <div className="flex justify-between items-end gap-2">
-          {/* 音乐播放控制完全没改 */}
           <div className="pointer-events-auto backdrop-blur-2xl p-3 sm:p-5 rounded-[1.5rem] border border-white/40 bg-white/10 w-52 sm:w-80 shadow-2xl flex items-center gap-3">
-             <button onClick={() => setIsPlaying(!isPlaying)} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90">
+             <button onClick={() => setIsPlaying(!isPlaying)} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90 transition-transform">
                {isPlaying ? '||' : '▶'}
              </button>
              <div className="flex-1 min-w-0">
                 <input className="w-full bg-transparent border-none text-white font-bold text-[11px] sm:text-sm outline-none" value={songInfo.title} onChange={e => setSongInfo({...songInfo, title: e.target.value})} />
                 <input className="w-full bg-transparent border-none text-white/50 text-[8px] sm:text-[10px] outline-none" value={songInfo.artist} onChange={e => setSongInfo({...songInfo, artist: e.target.value})} />
              </div>
-             <button onClick={() => musicInputRef.current?.click()} className="p-2 bg-white/5 rounded-lg">📁</button>
+             <button onClick={() => musicInputRef.current?.click()} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">📁</button>
           </div>
           
-          {/* 核心改动：如果是手机端，不渲染 GestureController */}
           {!isMobile && (
             <div className={`pointer-events-auto transition-all duration-700 ${isManualMode ? 'opacity-0 scale-90 translate-y-4' : 'opacity-100 scale-100 translate-y-0'}`}>
                <GestureController onGestureDetected={handleGesture} />
