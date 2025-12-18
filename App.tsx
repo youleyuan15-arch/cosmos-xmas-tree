@@ -33,7 +33,7 @@ export default function App() {
   const [currentShape, setCurrentShape] = useState<ShapeType>('tree');
   const [showPhoto, setShowPhoto] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false); // 解决手机视频权限
+  const [hasInteracted, setHasInteracted] = useState(false); 
 
   const [showForm, setShowForm] = useState(false);
   const [aspiration, setAspiration] = useState('');
@@ -86,7 +86,7 @@ export default function App() {
         setMessage('');
         setTimeout(() => { setCurrentShape(prevShape); setBurstTime(0); }, 8500);
     } catch (err) {
-        alert("发送失败，请检查数据库规则");
+        alert("发送失败");
     } finally {
         setIsSending(false);
     }
@@ -121,51 +121,40 @@ export default function App() {
   }, [isManualMode, pickNextPhoto]);
 
   return (
-    <div 
-      className="relative w-full h-full bg-black overflow-hidden font-sans text-white touch-none"
-      onClick={() => setHasInteracted(true)} // 激活视频和音频权限
-    >
+    <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white touch-none">
       <Scene currentShape={currentShape} handPosition={handPosition} burstTime={burstTime} density={particleDensity} />
       
-      {/* 顶部菜单区：适配刘海屏 pt-16 */}
-      <div className="absolute top-0 left-0 w-full p-4 pt-16 sm:pt-6 flex justify-between items-start z-30 pointer-events-none">
-        <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 rounded-2xl border border-white/30 shadow-lg">
-          <div className="flex flex-col gap-1">
-             <div className={`p-2 rounded-lg ${currentShape==='tree'?'bg-white/20':'opacity-50'}`}>✊</div>
-             <div className={`p-2 rounded-lg ${currentShape==='nebula'?'bg-white/20':'opacity-50'}`}>🖐️</div>
+      {/* 终极全屏交互层：确保用户点任何地方都能激活权限 */}
+      {!hasInteracted && (
+        <div 
+          onClick={() => setHasInteracted(true)}
+          className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center cursor-pointer p-10 text-center"
+        >
+          <div className="animate-bounce text-5xl mb-6">✨</div>
+          <h1 className="text-2xl font-bold mb-2">欢迎来到星空树</h1>
+          <p className="text-white/60 text-sm mb-8">点击屏幕开启宇宙交互与音乐</p>
+          <div className="px-8 py-3 bg-white text-black rounded-full font-bold uppercase tracking-widest text-xs">进入</div>
+        </div>
+      )}
+
+      {/* 顶部菜单区 */}
+      <div className="absolute top-0 left-0 w-full p-4 pt-16 sm:pt-10 flex justify-between items-start z-30 pointer-events-none">
+        <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 rounded-2xl border border-white/30 shadow-2xl">
+          <div className="flex flex-col gap-2">
+             <div onClick={() => setCurrentShape('tree')} className={`p-2 rounded-lg cursor-pointer ${currentShape==='tree'?'bg-white/20':'opacity-50'}`}>✊</div>
+             <div onClick={() => setCurrentShape('nebula')} className={`p-2 rounded-lg cursor-pointer ${currentShape==='nebula'?'bg-white/20':'opacity-50'}`}>🖐️</div>
           </div>
         </div>
         <div className="flex flex-col gap-3 pointer-events-auto items-end">
-           <button onClick={(e) => {e.stopPropagation(); setShowForm(true);}} className="px-5 py-2.5 rounded-full border border-white/50 bg-white/10 text-white text-xs backdrop-blur-md active:scale-95 shadow-xl">✉️ Letter</button>
-           <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2.5 rounded-full border text-xs transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5'}`}>
+           <button onClick={(e) => { e.stopPropagation(); setShowForm(true); }} className="px-6 py-2.5 rounded-full border border-white/50 bg-white/10 text-white text-xs backdrop-blur-md active:scale-95 shadow-xl">✉️ 寄信</button>
+           <button onClick={() => setIsManualMode(!isManualMode)} className={`px-6 py-2.5 rounded-full border text-xs transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5'}`}>
               {isManualMode ? 'MANUAL' : 'GESTURE'}
            </button>
         </div>
       </div>
 
-      {/* 底部 UI：适配底部横条 pb-16 */}
-      <div className="absolute bottom-0 left-0 w-full p-4 pb-16 sm:pb-8 flex justify-between items-end gap-2 pointer-events-none z-30">
-        <div className="pointer-events-auto backdrop-blur-2xl p-3 rounded-[1.8rem] border border-white/40 w-44 sm:w-80 bg-white/10 shadow-2xl">
+      {/* 底部 UI */}
+      <div className="absolute bottom-0 left-0 w-full p-4 pb-16 sm:pb-12 flex justify-between items-end gap-2 pointer-events-none z-30">
+        <div className="pointer-events-auto backdrop-blur-2xl p-4 rounded-[2rem] border border-white/40 w-48 sm:w-80 bg-white/10 shadow-2xl">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsPlaying(!isPlaying)} className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black shadow-lg">
-              {isPlaying ? "||" : "▶"}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] sm:text-sm font-bold truncate">{songInfo.title}</div>
-              <div className="text-[7px] sm:text-[9px] text-white/50 truncate uppercase tracking-widest">MUSIC PLAYER</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="pointer-events-auto transition-all transform origin-bottom-right scale-75 sm:scale-100 mb-[-10px]">
-           {/* 只有在用户点击过屏幕后才尝试加载摄像头组件 */}
-           {!isManualMode && hasInteracted && <GestureController onGestureDetected={handleGesture} />}
-           {!hasInteracted && !isManualMode && (
-             <div className="bg-white/10 border border-white/20 px-3 py-2 rounded-xl text-[8px] animate-pulse">点击屏幕开启手势识别</div>
-           )}
-        </div>
-      </div>
-
-      {/* 消息发送成功提示 */}
-      {burstTime > 0 && performance.now()/1000 - burstTime < 5.0 && (
-          <div className="absolute top-1/2 left-
+            <button onClick
