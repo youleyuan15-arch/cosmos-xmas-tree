@@ -2,18 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Cosmic Christmas Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* 核心修复：强制所有容器占满视口高度 */
+      /* 核心修复：使用 svh 适配移动端动态工具栏，消除底部黑块 */
       html, body, #root {
-        height: 100vh !important;
+        height: 100vh;
+        height: 100svh !important; 
         width: 100vw !important;
         margin: 0;
         padding: 0;
         overflow: hidden;
         background-color: #000000;
+        /* 防止手机端橡皮筋回弹效果，保持布局锁定 */
+        position: fixed; 
       }
 
       body { margin: 0; padding: 0; background: #000000; overflow: hidden; }
