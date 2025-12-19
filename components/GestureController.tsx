@@ -34,9 +34,11 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numHands: 1
+          numHands: 1,
+          minHandDetectionConfidence: 0.4, // 稍微降低门槛提高速度
+          minHandPresenceConfidence: 0.4,
+          minTrackingConfidence: 0.4
         });
-        // 尝试自动启动，失败也没关系，后面有点击启动
         startWebcam();
       } catch (error) { 
         console.error("MediaPipe Init Error:", error);
@@ -50,44 +52,25 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
   }, []);
 
   const startWebcam = async () => {
-    // 1. 检查 API 是否存在 (非 HTTPS 环境下这里会直接 alert)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("错误：当前环境不支持摄像头。请确保使用 HTTPS 访问，且不在预览窗口内打开。");
       setErrorMsg("环境不支持");
       return;
     }
     
     try {
-      // 2. 尝试获取视频流
-      const constraints = { 
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
-      };
-      
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (e) {
-        console.warn("标准请求失败，尝试简易模式...");
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "user", width: 640, height: 480 } 
+      });
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(e => alert("播放被拦截: " + e.message));
+          videoRef.current?.play();
           setWebcamRunning(true);
-          setErrorMsg(null);
           predictWebcam();
         };
       }
-    } catch (err: any) { 
-      console.error("Webcam Error:", err);
-      // 在手机端直接弹出错误详情
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert("权限被拒绝。请在手机设置里允许浏览器访问摄像头，并刷新页面。");
-      } else {
-        alert("启动失败: " + err.message);
-      }
+    } catch (err) { 
       setErrorMsg("启动失败");
     }
   };
@@ -106,7 +89,7 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
         const landmarks = results.landmarks[0];
         const detected = recognizeGesture(landmarks);
         setActiveGesture(detected);
-        onGestureDetectedRef.current({ type: detected, position: { x: landmarks[0].x, y: landmarks[0].y } });
+        onGestureDetectedRef.current({ type: detected, position: { x: 1 - landmarks[0].x, y: landmarks[0].y } });
       } else {
         setActiveGesture('None');
         onGestureDetectedRef.current({ type: 'None', position: { x: 0.5, y: 0.5 } });
@@ -118,16 +101,35 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
   const recognizeGesture = (lm: any[]): GestureType => {
     const wrist = lm[0];
     const getDist = (p1: any, p2: any) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-    const isUp = (tip: number, pip: number) => getDist(lm[tip], wrist) > getDist(lm[pip], wrist);
-    const indexUp = isUp(8, 6), middleUp = isUp(12, 10), ringUp = isUp(16, 14), pinkyUp = isUp(20, 18);
+    
+    // 判断手指是否伸直 (适当放宽系数到1.1)
+    const isUp = (tip: number, pip: number) => getDist(lm[tip], wrist) > getDist(lm[pip], wrist) * 1.1;
+    
+    const indexUp = isUp(8, 6);
+    const middleUp = isUp(12, 10);
+    const ringUp = isUp(16, 14);
+    const pinkyUp = isUp(20, 18);
     const upCount = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
+    
+    // 大拇指判定
     const thumbUp = getDist(lm[4], lm[5]) > getDist(lm[3], lm[5]) * 1.2;
+    // 捏合距离
     const pinchDist = getDist(lm[4], lm[8]);
 
-    if (pinchDist < 0.045 && upCount >= 1) return 'Pinch';
-    if (upCount === 0 && !thumbUp) return 'Fist';
+    // --- 识别逻辑排序 ---
+
+    // 1. 优先判定 Pinch (大拇指靠近食指，且其他手指至少有一根是立着的)
+    if (pinchDist < 0.045 && (middleUp || ringUp)) return 'Pinch';
+
+    // 2. 判定 Fist (关键：食指、中指、无名指都收回就算握拳)
+    if (!indexUp && !middleUp && !ringUp) return 'Fist';
+
+    // 3. 判定 L_Shape (食指大拇指张开)
     if (thumbUp && indexUp && upCount === 1) return 'L_Shape';
+
+    // 4. 判定 Open_Palm (三根及以上手指张开)
     if (upCount >= 3) return 'Open_Palm';
+
     return 'None';
   };
 
@@ -136,14 +138,7 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onGestureD
       onClick={startWebcam}
       className={`relative rounded-xl overflow-hidden shadow-xl border transition-all duration-300 w-32 h-24 sm:w-[180px] sm:h-[135px] bg-black group ${activeGesture !== 'None' ? 'border-yellow-400 scale-105' : 'border-white/30'}`}
     >
-      <video 
-        ref={videoRef} 
-        autoPlay 
-        playsInline 
-        muted 
-        webkit-playsinline="true"
-        className="w-full h-full object-cover opacity-80" 
-      />
+      <video ref={videoRef} autoPlay playsInline muted webkit-playsinline="true" className="w-full h-full object-cover opacity-80 scale-x-[-1]" />
       
       <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-black/40 text-[6px] text-white border border-white/20 flex items-center gap-1">
         <span className={`w-1 h-1 rounded-full ${webcamRunning ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></span>
