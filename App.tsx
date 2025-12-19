@@ -5,6 +5,8 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push, onValue } from 'firebase/database';
 import { ShapeType } from './types.ts';
 
+// 注意：如果你的 index.css 文件确实不存在，请不要在顶部 import 它
+
 const firebaseConfig = {
   apiKey: "AIzaSyClBUC_mSEghAwjpwW_bh_v4YNpEO7fua0",
   authDomain: "cosmic-christmas-tree.firebaseapp.com",
@@ -39,7 +41,7 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [burstTime, setBurstTime] = useState(0); 
   
-  // 密码逻辑：已更新为 0407
+  // 密码逻辑：0407
   const [inputPassword, setInputPassword] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const ADMIN_PASSWORD = "0407"; 
@@ -87,7 +89,7 @@ export default function App() {
 
   const pickNextPhoto = useCallback(() => {
     const now = Date.now();
-    if (now - lastPhotoTime.current < 1000) return; // 进一步微调节流到1秒，防闪烁效果更好
+    if (now - lastPhotoTime.current < 1000) return;
     lastPhotoTime.current = now;
 
     if (photoAlbum.length === 0) return;
@@ -97,6 +99,12 @@ export default function App() {
     const nextIndex = deckRef.current.pop();
     if (nextIndex !== undefined) setCurrentPhotoUrl(photoAlbum[nextIndex]);
   }, [photoAlbum]);
+
+  // --- 修复点：添加丢失的 handlePhotoToggle 函数 ---
+  const handlePhotoToggle = () => {
+    if (!showPhoto) pickNextPhoto();
+    setShowPhoto(!showPhoto);
+  };
 
   const handleGesture = useCallback((data: GestureData) => {
     if (isMobile || isManualMode) return; 
@@ -129,7 +137,7 @@ export default function App() {
     <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white" onClick={startExperience}>
       
       {!hasInteracted && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm cursor-pointer">
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm cursor-pointer pointer-events-auto">
            <div className="text-white/60 text-[10px] uppercase tracking-[0.3em] animate-pulse">Click anywhere to start cosmic journey</div>
         </div>
       )}
