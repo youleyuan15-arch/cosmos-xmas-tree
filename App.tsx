@@ -5,7 +5,9 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push } from 'firebase/database';
 import { ShapeType } from './types.ts';
 
-// --- Firebase 配置 ---
+// --- 初始歌曲链接 (已使用您的 GitHub 直链) ---
+const INITIAL_AUDIO_URL = "https://raw.githubusercontent.com/youleyuan15-arch/cosmos-xmas-tree/main/All%20I%20Want%20For%20Christmas%20Is%20You%20-%20Mariah%20Carey.mp3";
+
 const firebaseConfig = {
   apiKey: "AIzaSyClBUC_mSEghAwjpwW_bh_v4YNpEO7fua0",
   authDomain: "cosmic-christmas-tree.firebaseapp.com",
@@ -17,16 +19,8 @@ const firebaseConfig = {
   databaseURL: "https://cosmic-christmas-tree-default-rtdb.firebaseio.com"
 };
 
-const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";
-let db: any = null;
-if (isFirebaseConfigured) {
-  try {
-    const app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-  } catch (e) {
-    console.warn("Firebase Init Failed", e);
-  }
-}
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
 export default function App() {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -34,199 +28,176 @@ export default function App() {
   const [currentShape, setCurrentShape] = useState<ShapeType>('tree');
   const [showPhoto, setShowPhoto] = useState(false);
   const [isManualMode, setIsManualMode] = useState(isMobile); 
+  
   const [showForm, setShowForm] = useState(false);
   const [aspiration, setAspiration] = useState('');
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [burstTime, setBurstTime] = useState(0); 
 
-  // --- 音乐核心修复区 ---
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  // --- 音乐状态 ---
+  const [audioUrl, setAudioUrl] = useState<string>(INITIAL_AUDIO_URL);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [songInfo, setSongInfo] = useState({ title: 'Cosmic Silent Night', artist: 'Galaxy Ensemble' });
+  const [songInfo, setSongInfo] = useState({ title: 'All I Want For Christmas Is You', artist: 'Mariah Carey' });
   const audioRef = useRef<HTMLAudioElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
 
-  // 处理播放/暂停切换
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio || !audioUrl) {
-      // 如果没有加载音乐，点击播放时触发文件选择
-      musicInputRef.current?.click();
-      return;
-    };
-
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-    } else {
-      audio.play().then(() => {
-        setIsPlaying(true);
-      }).catch(err => {
-        console.error("Playback failed:", err);
-        // 处理浏览器拦截，提示用户
-      });
-    }
-  };
-
-  // 监听 URL 变化，确保新歌自动准备
+  // 尝试自动播放
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio && audioUrl) {
-      audio.load();
-      if (isPlaying) {
-        audio.play().catch(() => setIsPlaying(false));
-      }
-    }
-  }, [audioUrl]);
-
-  const handleMusicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) {
-      // 释放旧 URL 内存
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      
-      const newUrl = URL.createObjectURL(f);
-      setAudioUrl(newUrl);
-      setSongInfo({ 
-        title: f.name.replace(/\.[^/.]+$/, ""), 
-        artist: 'User Uploaded' 
+    if (audioRef.current) {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {
+        console.log("自动播放被拦截，等待交互");
       });
-      setIsPlaying(true); // 上传后尝试自动播放
     }
+  }, []);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
   };
 
-  // --- 其他功能逻辑 ---
-  const [handPosition, setHandPosition] = useState({ x: 0.5, y: 0.5 });
+  // --- 相册逻辑 ---
   const [photoAlbum, setPhotoAlbum] = useState<string[]>(["https://images.unsplash.com/photo-1543589077-47d81606c1bf?auto=format&fit=crop&w=600&q=80"]);
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string>(photoAlbum[0]);
   const deckRef = useRef<number[]>([]);
-  const wasPinchingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleSubmit = async () => {
-    if (!aspiration.trim() && !message.trim()) return;
-    setIsSending(true);
-    try {
-        if (db) await push(ref(db, 'messages'), { aspiration, message, timestamp: Date.now() });
-        setBurstTime(performance.now() / 1000);
-        const prevShape = currentShape;
-        setCurrentShape('clover');
-        setShowForm(false);
-        setAspiration('');
-        setMessage('');
-        setTimeout(() => { setCurrentShape(prevShape); setBurstTime(0); }, 8500);
-    } catch (err) {
-        alert("Send Failed");
-    } finally {
-        setIsSending(false);
-    }
-  };
 
   const pickNextPhoto = useCallback(() => {
     if (photoAlbum.length === 0) return;
-    if (deckRef.current.length === 0) deckRef.current = [...Array(photoAlbum.length).keys()].sort(() => Math.random() - 0.5);
+    if (deckRef.current.length === 0) {
+      deckRef.current = [...Array(photoAlbum.length).keys()].sort(() => Math.random() - 0.5);
+    }
     const nextIndex = deckRef.current.pop();
     if (nextIndex !== undefined) setCurrentPhotoUrl(photoAlbum[nextIndex]);
-  }, [photoAlbum]); 
+  }, [photoAlbum]);
+
+  // 触控相册按钮逻辑：与手势同步
+  const handlePhotoClick = () => {
+    if (!showPhoto) pickNextPhoto();
+    setShowPhoto(!showPhoto);
+  };
 
   const handleGesture = useCallback((data: GestureData) => {
-    if (isMobile) return; 
-    const { type, position } = data;
-    setHandPosition(position);
-    if (isManualMode) return;
-
+    if (isMobile || isManualMode) return; 
+    const { type } = data;
     if (type === 'Pinch') {
-       if (!wasPinchingRef.current) {
-         pickNextPhoto();
-         setShowPhoto(true);
-         wasPinchingRef.current = true;
-       }
+       pickNextPhoto();
+       setShowPhoto(true);
     } else {
-      if (wasPinchingRef.current) {
-        setShowPhoto(false);
-        wasPinchingRef.current = false;
-      }
+      setShowPhoto(false);
       if (type === 'Fist') setCurrentShape('tree');
       if (type === 'Open_Palm') setCurrentShape('nebula');
       if (type === 'L_Shape') setCurrentShape('text');
     }
   }, [isManualMode, pickNextPhoto, isMobile]);
 
+  const handleSubmit = async () => {
+    if (!aspiration.trim() && !message.trim()) return;
+    setIsSending(true);
+    try {
+      await push(ref(db, 'messages'), { aspiration, message, timestamp: Date.now() });
+      setBurstTime(performance.now() / 1000);
+      const prev = currentShape;
+      setCurrentShape('clover');
+      setShowForm(false);
+      setAspiration(''); setMessage('');
+      setTimeout(() => { setCurrentShape(prev); setBurstTime(0); }, 8500);
+    } catch (e) { alert("发送失败"); } finally { setIsSending(false); }
+  };
+
   return (
     <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white">
-      <Scene currentShape={currentShape} handPosition={handPosition} burstTime={burstTime} density={isMobile ? 0.4 : 1.0} />
+      <Scene currentShape={currentShape} burstTime={burstTime} density={isMobile ? 0.4 : 1.0} />
       
+      {/* 星空寄语板块 */}
       {showForm && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto p-4 sm:p-6">
             <div className="animate-form w-full max-sm:max-w-[92vw] max-w-sm bg-white/5 border border-white/40 backdrop-blur-3xl rounded-[2.5rem] p-5 sm:p-10 shadow-2xl">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-white text-lg sm:text-2xl font-bold tracking-tight">Cosmic Message</h2>
+                    <h2 className="text-white text-lg sm:text-2xl font-bold tracking-tight">星空寄语</h2>
                     <button onClick={() => setShowForm(false)} className="text-white/40 p-2 text-lg">✕</button>
                 </div>
                 <div className="space-y-6">
                     <div>
-                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Aspiration for 2025</label>
-                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="May the starlight guide..." />
+                      <label className="text-[10px] text-white/50 ml-1 mb-1 block tracking-widest uppercase">对明年的期许</label>
+                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="愿星光照亮前路..." />
                     </div>
                     <div>
-                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">To Me</label>
-                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="Write something..." />
+                      <label className="text-[10px] text-white/50 ml-1 mb-1 block tracking-widest uppercase">对我想说的话</label>
+                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="写下你的悄悄话..." />
                     </div>
-                    <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px]">
-                        {isSending ? 'Sending...' : 'Post to Stars'}
+                    <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px] hover:bg-gray-200 transition-colors">
+                        {isSending ? '正在寄出...' : '发送信笺'}
                     </button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* 照片展 & 光晕 (duration-150) */}
+      {/* 照片弹窗 */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none">
         <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-150 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
           <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover" />
-          <div className="text-center mt-3 font-serif text-gray-800 italic text-[10px] sm:text-lg">Merry Christmas</div>
+          <div className="text-center mt-3 font-serif text-gray-800 italic text-[10px] sm:text-lg">圣诞快乐</div>
         </div>
       </div>
 
       <input type="file" multiple ref={fileInputRef} onChange={(e) => { if (e.target.files) setPhotoAlbum(prev => [...prev, ...Array.from(e.target.files!).map(f => URL.createObjectURL(f))]); }} accept="image/*" className="hidden" />
-      <input type="file" ref={musicInputRef} onChange={handleMusicUpload} accept="audio/*" className="hidden" />
-      
-      {/* 隐藏的音频组件 */}
-      <audio ref={audioRef} src={audioUrl || ""} loop />
+      <input type="file" ref={musicInputRef} onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) {
+          setAudioUrl(URL.createObjectURL(f));
+          setSongInfo({ title: f.name.replace(/\.[^/.]+$/, ""), artist: '本地上传' });
+          setIsPlaying(true);
+        }
+      }} accept="audio/*" className="hidden" />
+      <audio ref={audioRef} src={audioUrl} loop crossOrigin="anonymous" />
 
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 p-3 sm:p-6 flex flex-col justify-between">
         <div className="flex justify-between items-start">
           <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] border border-white/50 shadow-lg">
             <div className="space-y-1">
-               <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''} cursor-pointer`}><span className="text-sm">✊</span><span className="text-[8px] font-bold uppercase tracking-widest">Tree</span></div>
-               <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''} cursor-pointer`}><span className="text-sm">🖐️</span><span className="text-[8px] font-bold uppercase tracking-widest">Space</span></div>
-               <div onClick={() => setCurrentShape('text')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20' : ''} cursor-pointer`}><span className="text-sm">👆</span><span className="text-[8px] font-bold uppercase tracking-widest">Text</span></div>
-               <div onClick={() => setShowPhoto(!showPhoto)} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20' : ''} cursor-pointer`}><span className="text-sm">👌</span><span className="text-[8px] font-bold uppercase tracking-widest">Photo</span></div>
+               <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">✊</span><span className="text-[10px] font-bold">圣诞树</span></div>
+               <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">🖐️</span><span className="text-[10px] font-bold">星云</span></div>
+               <div onClick={() => setCurrentShape('text')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👆</span><span className="text-[10px] font-bold">祝福</span></div>
+               <div onClick={handlePhotoClick} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👌</span><span className="text-[10px] font-bold">相册</span></div>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto items-end">
-             <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px]">✉️ Letter</button>
-             <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px]">🖼️ Album</button>
+             <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">✉️ 寄语</button>
+             <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">🖼️ 传照</button>
              {!isMobile && (
-                <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2 rounded-full border text-[10px] ${isManualMode ? 'bg-white text-black' : 'bg-white/5'}`}>
-                  {isManualMode ? 'MANUAL' : 'GESTURE'}
+                <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2 rounded-full border text-[10px] transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5 border-white/50'}`}>
+                  {isManualMode ? '手动模式' : '手势模式'}
                 </button>
              )}
           </div>
         </div>
         
         <div className="flex justify-between items-end gap-2">
-          {/* 音乐播放器修复点击逻辑 */}
+          {/* 音乐播放器：信息可编辑，📁图标上传 */}
           <div className="pointer-events-auto backdrop-blur-2xl p-3 sm:p-5 rounded-[1.5rem] border border-white/40 bg-white/10 w-52 sm:w-80 shadow-2xl flex items-center gap-3">
              <button onClick={togglePlay} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90 transition-transform">
                {isPlaying ? '||' : '▶'}
              </button>
-             <div className="flex-1 min-w-0" onClick={() => musicInputRef.current?.click()}>
-                <div className="w-full text-white font-bold text-[11px] sm:text-sm truncate cursor-pointer">{songInfo.title}</div>
-                <div className="w-full text-white/50 text-[8px] sm:text-[10px] truncate cursor-pointer">{songInfo.artist}</div>
+             <div className="flex-1 min-w-0">
+                <input 
+                  className="w-full bg-transparent border-none text-white font-bold text-[11px] sm:text-sm outline-none" 
+                  value={songInfo.title} 
+                  onChange={e => setSongInfo({...songInfo, title: e.target.value})} 
+                />
+                <input 
+                  className="w-full bg-transparent border-none text-white/50 text-[8px] sm:text-[10px] outline-none" 
+                  value={songInfo.artist} 
+                  onChange={e => setSongInfo({...songInfo, artist: e.target.value})} 
+                />
              </div>
-             <button onClick={() => musicInputRef.current?.click()} className="p-2 bg-white/5 rounded-lg">📁</button>
+             <button onClick={() => musicInputRef.current?.click()} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">📁</button>
           </div>
           
           {!isMobile && (
