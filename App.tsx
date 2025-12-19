@@ -2,7 +2,7 @@ import React, { Suspense, useState, useCallback, useRef, useEffect } from 'react
 import { Scene } from './components/Scene.tsx';
 import { GestureController, GestureData, GestureType } from './components/GestureController.tsx';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, push } from 'firebase/database';
+import { getDatabase, ref, push, onValue } from 'firebase/database';
 import { ShapeType } from './types.ts';
 
 // --- 初始歌曲链接 ---
@@ -31,8 +31,10 @@ export default function App() {
   const [isManualMode, setIsManualMode] = useState(isMobile);
   const [handPosition, setHandPosition] = useState({ x: 0.5, y: 0.5 });
   
-  // 寄语状态
+  // 寄语 & 信箱状态
   const [showForm, setShowForm] = useState(false);
+  const [showInbox, setShowInbox] = useState(false); // 控制信箱显示
+  const [inboxMessages, setInboxMessages] = useState<any[]>([]); // 存储读取到的信件
   const [aspiration, setAspiration] = useState('');
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -50,6 +52,21 @@ export default function App() {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string>(photoAlbum[0]);
   const deckRef = useRef<number[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- 1. 自动读取 Firebase 消息 ---
+  useEffect(() => {
+    const messagesRef = ref(db, 'messages');
+    // 实时监听数据库变化
+    const unsubscribe = onValue(messagesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // 转换成数组并反转（最新的在最前面）
+        const list = Object.values(data).reverse();
+        setInboxMessages(list);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // 自动播放处理
   useEffect(() => {
@@ -83,8 +100,7 @@ export default function App() {
   const handleGesture = useCallback((data: GestureData) => {
     if (isMobile || isManualMode) return; 
     const { type, position } = data;
-    
-    setHandPosition(position); // 确保手势位置更新
+    setHandPosition(position);
 
     if (type === 'Pinch') {
        pickNextPhoto();
@@ -103,61 +119,76 @@ export default function App() {
     try {
       await push(ref(db, 'messages'), { aspiration, message, timestamp: Date.now() });
       setBurstTime(performance.now() / 1000);
-      
       const prev = currentShape;
       setCurrentShape('clover');
       setShowForm(false);
       setAspiration(''); setMessage('');
-      
-      setTimeout(() => { 
-        setCurrentShape(prev); 
-        setBurstTime(0); 
-      }, 8500);
-    } catch (e) { alert("发送失败"); } finally { setIsSending(false); }
+      setTimeout(() => { setCurrentShape(prev); setBurstTime(0); }, 8500);
+    } catch (e) { alert("Sending failed"); } finally { setIsSending(false); }
   };
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white">
-      <Scene 
-        currentShape={currentShape} 
-        burstTime={burstTime} 
-        density={isMobile ? 0.4 : 1.0} 
-        handPosition={handPosition}
-      />
+      <Scene currentShape={currentShape} burstTime={burstTime} density={isMobile ? 0.4 : 1.0} handPosition={handPosition} />
       
-      {/* 寄语成功提示 */}
+      {/* 成功提示 */}
       {burstTime > 0 && (
           <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[60] text-white text-[10px] bg-white/5 px-8 py-3 rounded-full backdrop-blur-3xl border border-white/30 text-center shadow-lg animate-pulse whitespace-nowrap">
-              感谢你的来信，祝你好运~
+              Thank you for your letter, wish you luck~
           </div>
       )}
 
-      {/* 寄语表单 (保持中文) */}
+      {/* --- 2. 星际信箱列表界面 --- */}
+      {showInbox && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md pointer-events-auto p-4 sm:p-6">
+            <div className="w-full max-w-md bg-white/5 border border-white/20 backdrop-blur-3xl rounded-[2rem] p-6 sm:p-8 shadow-2xl h-[80vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-white text-xl font-bold tracking-tight">Star Messages ({inboxMessages.length})</h2>
+                    <button onClick={() => setShowInbox(false)} className="text-white/40 p-2 text-xl hover:text-white">✕</button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                    {inboxMessages.length === 0 ? (
+                        <div className="text-white/30 text-center mt-20 text-sm">No messages yet...</div>
+                    ) : (
+                        inboxMessages.map((msg, idx) => (
+                            <div key={idx} className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors">
+                                <div className="text-[10px] text-purple-300 uppercase tracking-wider mb-1">Aspiration</div>
+                                <div className="text-sm text-white mb-3">{msg.aspiration}</div>
+                                <div className="text-[10px] text-blue-300 uppercase tracking-wider mb-1">Message</div>
+                                <div className="text-xs text-white/70">{msg.message}</div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* 写信表单 */}
       {showForm && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto p-4 sm:p-6">
             <div className="animate-form w-full max-sm:max-w-[92vw] max-w-sm bg-white/5 border border-white/40 backdrop-blur-3xl rounded-[2.5rem] p-5 sm:p-10 shadow-2xl">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-white text-lg sm:text-2xl font-bold tracking-tight">星空寄语</h2>
+                    <h2 className="text-white text-lg sm:text-2xl font-bold tracking-tight">Cosmic Message</h2>
                     <button onClick={() => setShowForm(false)} className="text-white/40 p-2 text-lg">✕</button>
                 </div>
                 <div className="space-y-6">
                     <div>
-                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">对明年的期许</label>
-                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="愿星光照亮前路..." />
+                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Aspiration for 2025</label>
+                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="May the starlight guide..." />
                     </div>
                     <div>
-                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">对我想说的话</label>
-                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="写下你的悄悄话..." />
+                      <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">To Me</label>
+                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="Write something..." />
                     </div>
                     <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px] hover:bg-gray-200 transition-colors">
-                        {isSending ? '正在寄出...' : '发送信笺'}
+                        {isSending ? 'Sending...' : 'Post to Stars'}
                     </button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* 照片展 */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none">
         <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-150 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
           <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover" />
@@ -170,18 +201,16 @@ export default function App() {
         const f = e.target.files?.[0];
         if (f) {
           setAudioUrl(URL.createObjectURL(f));
-          setSongInfo({ title: f.name.replace(/\.[^/.]+$/, ""), artist: 'Local Upload' }); // 上传后默认显示英文占位
+          setSongInfo({ title: f.name.replace(/\.[^/.]+$/, ""), artist: 'Local Upload' });
           setIsPlaying(true);
         }
       }} accept="audio/*" className="hidden" />
       <audio ref={audioRef} src={audioUrl} loop crossOrigin="anonymous" />
 
-      {/* 底部 UI */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 p-3 sm:p-6 flex flex-col justify-between">
         <div className="flex justify-between items-start">
           <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] border border-white/50 shadow-lg">
             <div className="space-y-1">
-               {/* 1. 左上角 UI 改回英文 */}
                <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">✊</span><span className="text-[10px] font-bold uppercase tracking-widest">Tree</span></div>
                <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">🖐️</span><span className="text-[10px] font-bold uppercase tracking-widest">Space</span></div>
                <div onClick={() => setCurrentShape('text')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👆</span><span className="text-[10px] font-bold uppercase tracking-widest">Text</span></div>
@@ -189,7 +218,8 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto items-end">
-             {/* 2. 右上角 UI 改回英文 */}
+             {/* 3. 增加收件箱按钮 */}
+             <button onClick={() => setShowInbox(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">📨 Inbox</button>
              <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">✉️ Letter</button>
              <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all">🖼️ Album</button>
              {!isMobile && (
@@ -201,7 +231,6 @@ export default function App() {
         </div>
         
         <div className="flex justify-between items-end gap-2">
-          {/* 音乐播放器：保留编辑功能 */}
           <div className="pointer-events-auto backdrop-blur-2xl p-3 sm:p-5 rounded-[1.5rem] border border-white/40 bg-white/10 w-52 sm:w-80 shadow-2xl flex items-center gap-3">
              <button onClick={togglePlay} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90 transition-transform">
                {isPlaying ? '||' : '▶'}
