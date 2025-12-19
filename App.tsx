@@ -5,8 +5,6 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push, onValue } from 'firebase/database';
 import { ShapeType } from './types.ts';
 
-// 注意：如果你的 index.css 文件确实不存在，请不要在顶部 import 它
-
 const firebaseConfig = {
   apiKey: "AIzaSyClBUC_mSEghAwjpwW_bh_v4YNpEO7fua0",
   authDomain: "cosmic-christmas-tree.firebaseapp.com",
@@ -31,7 +29,6 @@ export default function App() {
   const [handPosition, setHandPosition] = useState({ x: 0.5, y: 0.5 });
   const [hasInteracted, setHasInteracted] = useState(false); 
 
-  // 寄语 & 信箱状态
   const [showForm, setShowForm] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
   const [activeTab, setActiveTab] = useState<'wish' | 'private'>('wish');
@@ -41,7 +38,6 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [burstTime, setBurstTime] = useState(0); 
   
-  // 密码逻辑：0407
   const [inputPassword, setInputPassword] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const ADMIN_PASSWORD = "0407"; 
@@ -89,7 +85,8 @@ export default function App() {
 
   const pickNextPhoto = useCallback(() => {
     const now = Date.now();
-    if (now - lastPhotoTime.current < 1000) return;
+    // 0.3秒一张的快闪速度
+    if (now - lastPhotoTime.current < 300) return;
     lastPhotoTime.current = now;
 
     if (photoAlbum.length === 0) return;
@@ -100,9 +97,8 @@ export default function App() {
     if (nextIndex !== undefined) setCurrentPhotoUrl(photoAlbum[nextIndex]);
   }, [photoAlbum]);
 
-  // --- 修复点：添加丢失的 handlePhotoToggle 函数 ---
+  // 修改：点击 Photo 按钮时仅切换显示，不触发快闪逻辑
   const handlePhotoToggle = () => {
-    if (!showPhoto) pickNextPhoto();
     setShowPhoto(!showPhoto);
   };
 
@@ -110,7 +106,11 @@ export default function App() {
     if (isMobile || isManualMode) return; 
     const { type, position } = data;
     setHandPosition(position);
-    if (type === 'Pinch') { pickNextPhoto(); setShowPhoto(true); } 
+    if (type === 'Pinch') { 
+      // 手势触发快闪
+      pickNextPhoto(); 
+      setShowPhoto(true); 
+    } 
     else {
       setShowPhoto(false);
       if (type === 'Fist') setCurrentShape('tree');
@@ -150,7 +150,6 @@ export default function App() {
           </div>
       )}
 
-      {/* Inbox UI */}
       {showInbox && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md pointer-events-auto p-4">
             <div className="w-full max-w-md bg-white/5 border border-white/20 backdrop-blur-3xl rounded-[2rem] p-6 shadow-2xl h-[80vh] flex flex-col">
@@ -200,7 +199,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 写信 UI */}
       {showForm && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto p-4 sm:p-6">
             <div className="animate-form w-full max-sm:max-w-[92vw] max-w-sm bg-white/5 border border-white/40 backdrop-blur-3xl rounded-[2.5rem] p-5 sm:p-10 shadow-2xl">
@@ -225,7 +223,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 照片弹窗 */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none">
         <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-300 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
           <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover" />
@@ -244,7 +241,6 @@ export default function App() {
       }} accept="audio/*" className="hidden" />
       <audio ref={audioRef} src={audioUrl} loop crossOrigin="anonymous" />
 
-      {/* 控制 UI */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 p-3 sm:p-6 flex flex-col justify-between">
         <div className="flex justify-between items-start">
           <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] border border-white/50 shadow-lg">
