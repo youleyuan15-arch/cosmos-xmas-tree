@@ -5,7 +5,6 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push, onValue } from 'firebase/database';
 import { ShapeType } from './types.ts';
 
-// --- Firebase 配置 ---
 const firebaseConfig = {
   apiKey: "AIzaSyClBUC_mSEghAwjpwW_bh_v4YNpEO7fua0",
   authDomain: "cosmic-christmas-tree.firebaseapp.com",
@@ -19,7 +18,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-
 const INITIAL_AUDIO_URL = "https://raw.githubusercontent.com/youleyuan15-arch/cosmos-xmas-tree/main/All%20I%20Want%20For%20Christmas%20Is%20You%20-%20Mariah%20Carey.mp3";
 
 export default function App() {
@@ -29,16 +27,22 @@ export default function App() {
   const [showPhoto, setShowPhoto] = useState(false);
   const [isManualMode, setIsManualMode] = useState(isMobile);
   const [handPosition, setHandPosition] = useState({ x: 0.5, y: 0.5 });
-  
+  const [hasInteracted, setHasInteracted] = useState(false); 
+
   // 寄语 & 信箱状态
   const [showForm, setShowForm] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
-  const [activeTab, setActiveTab] = useState<'wish' | 'private'>('wish'); // 区分信箱板块
+  const [activeTab, setActiveTab] = useState<'wish' | 'private'>('wish');
   const [inboxMessages, setInboxMessages] = useState<any[]>([]);
   const [aspiration, setAspiration] = useState('');
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [burstTime, setBurstTime] = useState(0); 
+  
+  // 密码逻辑：已更新为 0407
+  const [inputPassword, setInputPassword] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const ADMIN_PASSWORD = "0407"; 
 
   const [audioUrl, setAudioUrl] = useState<string>(INITIAL_AUDIO_URL);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -50,8 +54,8 @@ export default function App() {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string>(photoAlbum[0]);
   const deckRef = useRef<number[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastPhotoTime = useRef(0);
 
-  // 监听 Firebase 消息
   useEffect(() => {
     const messagesRef = ref(db, 'messages');
     const unsubscribe = onValue(messagesRef, (snapshot) => {
@@ -64,11 +68,16 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (audioRef.current && audioUrl) {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+  const startExperience = () => {
+    if (audioRef.current && !hasInteracted) {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+        setHasInteracted(true);
+      }).catch(() => {
+        setHasInteracted(true);
+      });
     }
-  }, [audioUrl]);
+  };
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -77,6 +86,10 @@ export default function App() {
   };
 
   const pickNextPhoto = useCallback(() => {
+    const now = Date.now();
+    if (now - lastPhotoTime.current < 1000) return; // 进一步微调节流到1秒，防闪烁效果更好
+    lastPhotoTime.current = now;
+
     if (photoAlbum.length === 0) return;
     if (deckRef.current.length === 0) {
       deckRef.current = [...Array(photoAlbum.length).keys()].sort(() => Math.random() - 0.5);
@@ -84,11 +97,6 @@ export default function App() {
     const nextIndex = deckRef.current.pop();
     if (nextIndex !== undefined) setCurrentPhotoUrl(photoAlbum[nextIndex]);
   }, [photoAlbum]);
-
-  const handlePhotoToggle = () => {
-    if (!showPhoto) pickNextPhoto();
-    setShowPhoto(!showPhoto);
-  };
 
   const handleGesture = useCallback((data: GestureData) => {
     if (isMobile || isManualMode) return; 
@@ -118,7 +126,14 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white">
+    <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white" onClick={startExperience}>
+      
+      {!hasInteracted && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm cursor-pointer">
+           <div className="text-white/60 text-[10px] uppercase tracking-[0.3em] animate-pulse">Click anywhere to start cosmic journey</div>
+        </div>
+      )}
+
       <Scene currentShape={currentShape} burstTime={burstTime} density={isMobile ? 0.4 : 1.0} handPosition={handPosition} />
       
       {burstTime > 0 && (
@@ -127,56 +142,57 @@ export default function App() {
           </div>
       )}
 
-      {/* --- 分类信箱界面 --- */}
+      {/* Inbox UI */}
       {showInbox && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md pointer-events-auto p-4">
             <div className="w-full max-w-md bg-white/5 border border-white/20 backdrop-blur-3xl rounded-[2rem] p-6 shadow-2xl h-[80vh] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-white text-xl font-bold tracking-tight">Star Inbox</h2>
-                    <button onClick={() => setShowInbox(false)} className="text-white/40 p-2 text-xl hover:text-white">✕</button>
+                    <button onClick={() => {setShowInbox(false); setIsUnlocked(false); setInputPassword('');}} className="text-white/40 p-2 text-xl hover:text-white">✕</button>
                 </div>
                 
-                {/* 分类 Tabs */}
                 <div className="flex bg-white/10 p-1 rounded-xl mb-6">
-                    <button 
-                        onClick={() => setActiveTab('wish')}
-                        className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'wish' ? 'bg-white text-black shadow-lg' : 'text-white/40'}`}
-                    >
-                        2025 Wishes
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('private')}
-                        className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'private' ? 'bg-white text-black shadow-lg' : 'text-white/40'}`}
-                    >
-                        Private
-                    </button>
+                    <button onClick={() => setActiveTab('wish')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'wish' ? 'bg-white text-black' : 'text-white/40'}`}>2025 Wishes</button>
+                    <button onClick={() => setActiveTab('private')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'private' ? 'bg-white text-black' : 'text-white/40'}`}>Private</button>
                 </div>
 
-                {/* 列表内容 */}
-                <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-                    {inboxMessages.length === 0 ? (
-                        <div className="text-white/30 text-center mt-20 text-sm">Empty space...</div>
-                    ) : (
-                        inboxMessages.map((msg, idx) => (
-                            // 根据 Tab 过滤显示内容，如果没有填内容则不显示该卡片
-                            ((activeTab === 'wish' && msg.aspiration) || (activeTab === 'private' && msg.message)) && (
-                                <div key={idx} className="bg-white/5 rounded-2xl p-5 border border-white/10 animate-fade-in">
-                                    <div className="text-[9px] text-white/30 mb-2 font-mono">
-                                        {new Date(msg.timestamp).toLocaleDateString()}
-                                    </div>
-                                    <div className="text-sm leading-relaxed text-white/90">
-                                        {activeTab === 'wish' ? msg.aspiration : msg.message}
-                                    </div>
-                                </div>
-                            )
-                        ))
-                    )}
-                </div>
+                {activeTab === 'private' && !isUnlocked ? (
+                  <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                    <div className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Admin Password Required</div>
+                    <input 
+                      type="password" 
+                      placeholder="••••" 
+                      maxLength={4}
+                      value={inputPassword}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInputPassword(val);
+                        if(val === ADMIN_PASSWORD) setIsUnlocked(true);
+                      }}
+                      className="bg-white/5 border border-white/20 rounded-xl px-4 py-2 text-center text-xl tracking-[0.5em] outline-none focus:border-white/50 w-32"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+                    {inboxMessages.map((msg, idx) => (
+                      ((activeTab === 'wish' && msg.aspiration) || (activeTab === 'private' && msg.message)) && (
+                        <div key={idx} className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                          <div className="text-[9px] text-white/30 mb-2 font-mono">
+                            {new Date(msg.timestamp).toLocaleString('zh-CN', { hour12: false })}
+                          </div>
+                          <div className="text-sm leading-relaxed text-white/90">
+                            {activeTab === 'wish' ? msg.aspiration : msg.message}
+                          </div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                )}
             </div>
         </div>
       )}
 
-      {/* 写信表单 */}
+      {/* 写信 UI */}
       {showForm && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto p-4 sm:p-6">
             <div className="animate-form w-full max-sm:max-w-[92vw] max-w-sm bg-white/5 border border-white/40 backdrop-blur-3xl rounded-[2.5rem] p-5 sm:p-10 shadow-2xl">
@@ -187,13 +203,13 @@ export default function App() {
                 <div className="space-y-6">
                     <div>
                       <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Aspiration for 2025</label>
-                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="May the starlight guide..." />
+                      <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="May the starlight guide..." />
                     </div>
                     <div>
                       <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Private Message to Me</label>
-                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none focus:border-white/40 transition-colors" placeholder="Write something confidential..." />
+                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="Write something confidential..." />
                     </div>
-                    <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px] hover:bg-gray-200 transition-colors">
+                    <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px]">
                         {isSending ? 'Sending...' : 'Post to Stars'}
                     </button>
                 </div>
@@ -203,7 +219,7 @@ export default function App() {
 
       {/* 照片弹窗 */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none">
-        <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-150 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
+        <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-300 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
           <img src={currentPhotoUrl} alt="Memory" className="w-[45vw] h-[45vw] sm:w-[65vw] sm:h-[65vw] max-w-[260px] max-h-[260px] object-cover" />
           <div className="text-center mt-3 font-serif text-gray-800 italic text-[10px] sm:text-lg">Merry Christmas</div>
         </div>
@@ -214,13 +230,13 @@ export default function App() {
         const f = e.target.files?.[0];
         if (f) {
           setAudioUrl(URL.createObjectURL(f));
-          setSongInfo({ title: f.name.replace(/\.[^/.]+$/, ""), artist: 'Local Upload' });
+          setSongInfo({ title: f.name.replace(/\.[^/.]+$/, ""), artist: 'Local' });
           setIsPlaying(true);
         }
       }} accept="audio/*" className="hidden" />
       <audio ref={audioRef} src={audioUrl} loop crossOrigin="anonymous" />
 
-      {/* 顶部控制 UI */}
+      {/* 控制 UI */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 p-3 sm:p-6 flex flex-col justify-between">
         <div className="flex justify-between items-start">
           <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] border border-white/50 shadow-lg">
@@ -243,7 +259,6 @@ export default function App() {
           </div>
         </div>
         
-        {/* 音乐播放器 */}
         <div className="flex justify-between items-end gap-2">
           <div className="pointer-events-auto backdrop-blur-2xl p-3 sm:p-5 rounded-[1.5rem] border border-white/40 bg-white/10 w-52 sm:w-80 shadow-2xl flex items-center gap-3">
              <button onClick={togglePlay} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90 transition-transform">
