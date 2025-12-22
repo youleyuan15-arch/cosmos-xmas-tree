@@ -19,13 +19,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// [修改点]：指向本地上传的音乐文件
-const INITIAL_AUDIO_URL = "/music.mp3";
+// ✅ 已修复：改为相对路径 "./"，这样 GitHub Pages 才能找到音乐文件
+const INITIAL_AUDIO_URL = "./music.mp3";
 
 export default function App() {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
    
-  // 修复 1: 增加资源加载状态
   const [loadProgress, setLoadProgress] = useState(0);
   const [isReady, setIsReady] = useState(false);
 
@@ -51,7 +50,6 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string>(INITIAL_AUDIO_URL);
   const [isPlaying, setIsPlaying] = useState(false);
   
-  // [确认保留]：默认歌名和歌手是你要求的 Mariah Carey
   const [songInfo, setSongInfo] = useState({ title: 'All I Want For Christmas Is You', artist: 'Mariah Carey' });
   
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -63,7 +61,6 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastPhotoTime = useRef(0);
 
-  // 模拟加载进度
   useEffect(() => {
     const timer = setInterval(() => {
       setLoadProgress(prev => {
@@ -91,18 +88,23 @@ export default function App() {
   }, []);
 
   const startExperience = () => {
-    // 修复 2: 确保点击时音乐立即触发（解决 iOS 禁音）
     if (!isReady || hasInteracted) return;
     setHasInteracted(true);
     if (audioRef.current) {
-      // 这里的 play 会在用户点击遮罩层的一瞬间执行，实现“自动播放”
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch((e) => console.log("Audio play blocked", e));
     }
   };
 
-  const togglePlay = () => {
+  const togglePlay = (e?: React.MouseEvent) => {
+    e?.stopPropagation(); 
     if (!audioRef.current) return;
-    isPlaying ? audioRef.current.pause() : audioRef.current.play();
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(console.error);
+    }
     setIsPlaying(!isPlaying);
   };
 
@@ -110,13 +112,10 @@ export default function App() {
     const now = Date.now();
     if (now - lastPhotoTime.current < 300) return;
     lastPhotoTime.current = now;
-
     if (photoAlbum.length <= 1) return;
-    
-    // 修复 3: 真正的洗牌去重算法
     if (deckRef.current.length === 0) {
       deckRef.current = [...Array(photoAlbum.length).keys()]
-        .filter(i => photoAlbum[i] !== currentPhotoUrl) // 排除掉当前正在显示的
+        .filter(i => photoAlbum[i] !== currentPhotoUrl) 
         .sort(() => Math.random() - 0.5);
     }
     const nextIndex = deckRef.current.pop();
@@ -124,7 +123,7 @@ export default function App() {
   }, [photoAlbum, currentPhotoUrl]);
 
   const handlePhotoToggle = () => {
-    if (!showPhoto) pickNextPhoto(); // 每次打开时主动换一张
+    if (!showPhoto) pickNextPhoto(); 
     setShowPhoto(!showPhoto);
   };
 
@@ -138,7 +137,6 @@ export default function App() {
     } 
     else if (type !== 'None') {
       setShowPhoto(false);
-      // [确认保留]：四个手势完全还原，包含 L_Shape
       if (type === 'Fist') setCurrentShape('tree');
       if (type === 'Open_Palm') setCurrentShape('nebula');
       if (type === 'L_Shape') setCurrentShape('text');
@@ -162,9 +160,9 @@ export default function App() {
   return (
     <div className="relative w-full h-full bg-black overflow-hidden font-sans text-white" onClick={startExperience}>
       
-      {/* 引导层：保留原版加载进度条和样式 */}
       {!hasInteracted && (
-        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md cursor-pointer pointer-events-auto">
+        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md cursor-pointer pointer-events-auto">
+           {/* ✨ 圣诞树加载图标 */}
            <div className="text-5xl mb-10 animate-pulse">🎄</div>
            {!isReady ? (
              <div className="flex flex-col items-center gap-3">
@@ -174,7 +172,7 @@ export default function App() {
                <div className="text-[9px] tracking-[0.4em] text-white/40 uppercase">Loading {Math.floor(loadProgress)}%</div>
              </div>
            ) : (
-             <div className="text-white/60 text-[10px] uppercase tracking-[0.3em] animate-pulse border border-white/20 px-6 py-2 rounded-full">Touch to start cosmic journey</div>
+             <div className="text-white/60 text-[10px] uppercase tracking-[0.3em] animate-bounce border border-white/20 px-6 py-2 rounded-full">Click to start Journey</div>
            )}
         </div>
       )}
@@ -192,12 +190,12 @@ export default function App() {
             <div className="w-full max-w-md bg-white/5 border border-white/20 backdrop-blur-3xl rounded-[2rem] p-6 shadow-2xl h-[80vh] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-white text-xl font-bold tracking-tight">Star Inbox</h2>
-                    <button onClick={() => {setShowInbox(false); setIsUnlocked(false); setInputPassword('');}} className="text-white/40 p-2 text-xl hover:text-white">✕</button>
+                    <button onClick={(e) => {e.stopPropagation(); setShowInbox(false); setIsUnlocked(false); setInputPassword('');}} className="text-white/40 p-2 text-xl hover:text-white">✕</button>
                 </div>
                 
                 <div className="flex bg-white/10 p-1 rounded-xl mb-6">
-                    <button onClick={() => setActiveTab('wish')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'wish' ? 'bg-white text-black' : 'text-white/40'}`}>2025 Wishes</button>
-                    <button onClick={() => setActiveTab('private')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'private' ? 'bg-white text-black' : 'text-white/40'}`}>Private</button>
+                    <button onClick={(e) => {e.stopPropagation(); setActiveTab('wish');}} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'wish' ? 'bg-white text-black' : 'text-white/40'}`}>2025 Wishes</button>
+                    <button onClick={(e) => {e.stopPropagation(); setActiveTab('private');}} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all ${activeTab === 'private' ? 'bg-white text-black' : 'text-white/40'}`}>Private</button>
                 </div>
 
                 {activeTab === 'private' && !isUnlocked ? (
@@ -208,6 +206,7 @@ export default function App() {
                       placeholder="••••" 
                       maxLength={4}
                       value={inputPassword}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
                         const val = e.target.value;
                         setInputPassword(val);
@@ -241,18 +240,18 @@ export default function App() {
             <div className="animate-form w-full max-sm:max-w-[92vw] max-w-sm bg-white/5 border border-white/40 backdrop-blur-3xl rounded-[2.5rem] p-5 sm:p-10 shadow-2xl">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-white text-lg sm:text-2xl font-bold tracking-tight">Cosmic Message</h2>
-                    <button onClick={() => setShowForm(false)} className="text-white/40 p-2 text-lg">✕</button>
+                    <button onClick={(e) => {e.stopPropagation(); setShowForm(false);}} className="text-white/40 p-2 text-lg">✕</button>
                 </div>
                 <div className="space-y-6">
-                    <div>
+                    <div onClick={(e) => e.stopPropagation()}>
                       <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Aspiration for 2025</label>
                       <textarea value={aspiration} onChange={(e) => setAspiration(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="May the starlight guide..." />
                     </div>
-                    <div>
+                    <div onClick={(e) => e.stopPropagation()}>
                       <label className="text-[10px] text-white/50 ml-1 mb-1 block uppercase tracking-widest">Private Message to Me</label>
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white text-xs outline-none h-20 resize-none" placeholder="Write something confidential..." />
                     </div>
-                    <button onClick={handleSubmit} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px]">
+                    <button onClick={(e) => {e.stopPropagation(); handleSubmit();}} disabled={isSending} className="w-full py-4 bg-white text-black rounded-xl font-bold uppercase text-[10px]">
                         {isSending ? 'Sending...' : 'Post to Stars'}
                     </button>
                 </div>
@@ -260,7 +259,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 照片展示 - 修复增加了 key 解决刷新问题 */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 flex items-center justify-center pointer-events-none">
         <div className={`bg-white p-1 sm:p-2 pb-3 sm:pb-6 shadow-[0_0_80px_rgba(255,255,255,0.6)] transform origin-center transition-all duration-300 ease-out ${showPhoto ? 'scale-100 opacity-100 rotate-[-2deg]' : 'scale-75 opacity-0 rotate-[5deg]'}`}>
           <img 
@@ -277,9 +275,9 @@ export default function App() {
         if (e.target.files) {
           const newUrls = Array.from(e.target.files!).map(f => URL.createObjectURL(f));
           setPhotoAlbum(prev => [...prev, ...newUrls]);
-          setCurrentPhotoUrl(newUrls[0]); // 自动切换到新上传的第一张
+          setCurrentPhotoUrl(newUrls[0]); 
           setShowPhoto(true); 
-          deckRef.current = []; // 清空洗牌堆
+          deckRef.current = []; 
         }
       }} accept="image/*" className="hidden" />
 
@@ -297,18 +295,18 @@ export default function App() {
         <div className="flex justify-between items-start">
           <div className="pointer-events-auto bg-white/5 backdrop-blur-xl p-2 sm:p-4 rounded-[1.2rem] border border-white/50 shadow-lg">
             <div className="space-y-1">
-               <div onClick={() => setCurrentShape('tree')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">✊</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Tree</span></div>
-               <div onClick={() => setCurrentShape('nebula')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">🖐️</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Space</span></div>
-               <div onClick={() => setCurrentShape('text')} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👆</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Text</span></div>
-               <div onClick={handlePhotoToggle} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👌</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Photo</span></div>
+               <div onClick={(e) => {e.stopPropagation(); setCurrentShape('tree');}} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='tree' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">✊</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Tree</span></div>
+               <div onClick={(e) => {e.stopPropagation(); setCurrentShape('nebula');}} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='nebula' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">🖐️</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Space</span></div>
+               <div onClick={(e) => {e.stopPropagation(); setCurrentShape('text');}} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${currentShape==='text' ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👆</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Text</span></div>
+               <div onClick={(e) => {e.stopPropagation(); handlePhotoToggle();}} className={`flex items-center gap-2 py-1.5 px-3 rounded-lg ${showPhoto ? 'bg-white/20' : ''} cursor-pointer transition-colors`}><span className="text-sm">👌</span><span className="text-[10px] font-bold uppercase tracking-widest text-inherit">Photo</span></div>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto items-end">
-             <button onClick={() => setShowInbox(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">📨 Inbox</button>
-             <button onClick={() => setShowForm(true)} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">✉️ Letter</button>
-             <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">🖼️ Album</button>
+             <button onClick={(e) => {e.stopPropagation(); setShowInbox(true);}} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">📨 Inbox</button>
+             <button onClick={(e) => {e.stopPropagation(); setShowForm(true);}} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">✉️ Letter</button>
+             <button onClick={(e) => {e.stopPropagation(); fileInputRef.current?.click();}} className="px-5 py-2 rounded-full border border-white/50 bg-white/5 text-[10px] hover:bg-white/10 transition-all font-bold">🖼️ Album</button>
              {!isMobile && (
-                <button onClick={() => setIsManualMode(!isManualMode)} className={`px-5 py-2 rounded-full border text-[10px] transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5 border-white/50'}`}>
+                <button onClick={(e) => {e.stopPropagation(); setIsManualMode(!isManualMode);}} className={`px-5 py-2 rounded-full border text-[10px] transition-all ${isManualMode ? 'bg-white text-black font-bold' : 'bg-white/5 border-white/50'}`}>
                   {isManualMode ? 'MANUAL' : 'GESTURE'}
                 </button>
              )}
@@ -320,11 +318,11 @@ export default function App() {
              <button onClick={togglePlay} className="w-10 h-10 sm:w-14 sm:h-14 flex-shrink-0 flex items-center justify-center rounded-full bg-white text-black font-bold active:scale-90 transition-transform">
                {isPlaying ? '||' : '▶'}
              </button>
-             <div className="flex-1 min-w-0">
+             <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                 <input className="w-full bg-transparent border-none text-white font-bold text-[11px] sm:text-sm outline-none" value={songInfo.title} onChange={e => setSongInfo({...songInfo, title: e.target.value})} />
                 <input className="w-full bg-transparent border-none text-white/50 text-[8px] sm:text-[10px] outline-none" value={songInfo.artist} onChange={e => setSongInfo({...songInfo, artist: e.target.value})} />
              </div>
-             <button onClick={() => musicInputRef.current?.click()} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">📁</button>
+             <button onClick={(e) => {e.stopPropagation(); musicInputRef.current?.click();}} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">📁</button>
           </div>
           
           {!isMobile && (
